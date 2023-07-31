@@ -38,7 +38,11 @@ struct NpChkBase {
              "] is out of range (size = " + std::to_string(size) + ")")
                 .c_str());
     }
-    virtual void updateName(){}
+    virtual void updateName() = 0;
+    void setName(const std::string &name) {
+        this->name = name;
+        this->updateName();
+    }
 };
 template <typename T>
 class shared_ptr : public NpChkBase {
@@ -49,6 +53,7 @@ class shared_ptr : public NpChkBase {
             failNullPtr();
         }
     }
+    void updateName() override {}
 
   public:
     shared_ptr() = default;
@@ -86,11 +91,10 @@ class array : public NpChkBase, public std::array<T, N> {
     explicit array(const char *names) : NpChkBase(names), Base() {
         updateName();
     }
-    void updateName() override{
-        if constexpr(std::is_base_of_v<NpChkBase, T>){
+    void updateName() override {
+        if constexpr (std::is_base_of_v<NpChkBase, T>) {
             for (std::size_t n = 0; n < N; ++n) {
-                base()[n].name = this->name + "[" + std::to_string(n) + "]";
-                base()[n].updateName();
+                base()[n].setName(this->name + "[" + std::to_string(n) + "]");
             }
         }
     }
