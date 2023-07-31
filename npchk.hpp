@@ -3,65 +3,62 @@
 #include <stdexcept>
 
 namespace npchk {
-std::string nameParse(const char *names) {
-    static const char *current_names, *current_names_pos;
-    if (names != current_names) {
-        current_names = names;
-        current_names_pos = names;
-    }
-    const char *start = current_names_pos;
-
-    while (*current_names_pos != ',' && *current_names_pos != 0) {
-        ++current_names_pos;
-    }
-    const char *end = current_names_pos;
-    ++current_names_pos; // ','
-    while (*current_names_pos == ' ' || *current_names_pos == 0) {
-        ++current_names_pos;
-    }
-    return std::string(start, static_cast<std::string::size_type>(end - start));
-}
-
 struct NpChkBase {
     std::string name;
-    NpChkBase(const char *names) : name(nameParse(names)) {}
-    void failNullPtr() {
+    NpChkBase() : name("(unknown variable)") {}
+    explicit NpChkBase(const char *names) {
+        static const char *current_names, *current_names_pos;
+        if (names != current_names) {
+            current_names = names;
+            current_names_pos = names;
+        }
+        const char *start = current_names_pos;
+
+        while (*current_names_pos != ',' && *current_names_pos != 0) {
+            ++current_names_pos;
+        }
+        const char *end = current_names_pos;
+        if (*current_names_pos == ',') {
+            ++current_names_pos;
+            while (*current_names_pos == ' ' || *current_names_pos == 0) {
+                ++current_names_pos;
+            }
+        }
+        name = std::string(start,
+                           static_cast<std::string::size_type>(end - start));
+    }
+    void failNullPtr() const {
         throw std::runtime_error((name + " is nullptr").c_str());
     }
 };
 template <typename T>
-class shared_ptr : public std::shared_ptr<T>, NpChkBase {
-    void check() {
-        if (static_cast<std::shared_ptr<T> &>(*this) == nullptr) {
+class shared_ptr : public NpChkBase {
+    using Base = std::shared_ptr<T>;
+    Base base;
+    void check() const {
+        if (base == nullptr) {
             failNullPtr();
         }
     }
 
   public:
-    shared_ptr(const char *names) : std::shared_ptr<T>(), NpChkBase(names) {}
+    shared_ptr() = default;
+    explicit shared_ptr(const char *names) : NpChkBase(names), base() {}
     template <typename U>
     auto operator=(const U &rhs) {
-        static_cast<std::shared_ptr<T> &>(*this) = rhs;
+        base = rhs;
     }
-    operator std::shared_ptr<T>() {
+    operator Base() const {
         check();
-        std::cout << "cast" << std::endl;
-        return static_cast<std::shared_ptr<T>>(
-            static_cast<std::shared_ptr<T> &>(*this));
+        return base;
     }
-    operator const std::shared_ptr<T> &() const {
+    auto get() const {
         check();
-        std::cout << "cast" << std::endl;
-        return static_cast<std::shared_ptr<T>>(
-            static_cast<std::shared_ptr<T> &>(*this));
+        return base.get();
     }
-    auto get() {
-        check();
-        return this->std::shared_ptr<T>::get();
-    }
-    auto operator*() { return *get(); }
-    auto operator->() { return get(); }
-    auto operator[](std::ptrdiff_t i) { return get()[i]; }
+    auto operator*() const { return *get(); }
+    auto operator->() const { return get(); }
+    // auto operator[](std::ptrdiff_t i) const { return get()[i]; }
 };
 } // namespace npchk
 
