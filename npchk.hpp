@@ -1,44 +1,56 @@
 #pragma once
 #include <memory>
 #include <string>
+#include <cstring>
 #include <stdexcept>
 #include <type_traits>
 
 namespace npchk {
+
+// 名前登録を管理するベースクラス
 struct NpChkBase {
     std::string name;
     NpChkBase() : name("(unknown variable)") {}
     explicit NpChkBase(const char *names) {
-        static const char *current_names, *current_names_pos;
-        if (names != current_names) {
-            current_names = names;
+        // names: NPCHKに渡された引数全体 (例: "hoge1, hoge2")
+        // current_names_pos: namesの先頭アドレス、
+        //      コンストラクタが呼ばれるたびに次の変数名の先頭に進む
+        //      最後まで読んだらnullptrにする
+        static const char *current_names_pos = nullptr;
+        if (current_names_pos == nullptr) {
             current_names_pos = names;
         }
         const char *start = current_names_pos;
-
         while (*current_names_pos != ',' && *current_names_pos != 0) {
             ++current_names_pos;
         }
         const char *end = current_names_pos;
         if (*current_names_pos == ',') {
             ++current_names_pos;
-            while (*current_names_pos == ' ' || *current_names_pos == 0) {
+            while (*current_names_pos == ' ') {
                 ++current_names_pos;
             }
+        }
+        if (*current_names_pos == 0) {
+            current_names_pos = nullptr;
         }
         name = std::string(start,
                            static_cast<std::string::size_type>(end - start));
     }
+    // nullptr例外を投げる
     void failNullPtr() const {
         throw std::runtime_error((name + " is nullptr").c_str());
     }
+    // outofrange例外を投げる (要素数sizeのn番目にアクセスした)
     void failOutOfRange(std::size_t n, std::size_t size) const {
         throw std::out_of_range(
             (name + "[" + std::to_string(n) +
              "] is out of range (size = " + std::to_string(size) + ")")
                 .c_str());
     }
+    // 子要素に名前を適用する処理
     virtual void updateName() = 0;
+    // これの名前を設定しupdateNameを呼び出す
     void setName(const std::string &name) {
         this->name = name;
         this->updateName();
@@ -46,14 +58,18 @@ struct NpChkBase {
 };
 template <typename T>
 class shared_ptr : public NpChkBase {
+    // std::shared_ptrにキャストするときにチェックをする
+    // そのためstd::shared_ptrの継承はしない
     using Base = std::shared_ptr<T>;
     Base base;
+    // nullptrかチェックし投げる
     void check() const {
         if (base == nullptr) {
             failNullPtr();
         }
     }
-    void updateName() override {}
+    // 子要素は無い
+    void updateName() override final {}
 
   public:
     shared_ptr() = default;
@@ -63,6 +79,7 @@ class shared_ptr : public NpChkBase {
         base = rhs;
         return *this;
     }
+    // キャスト
     operator Base() const {
         check();
         return base;
@@ -75,14 +92,24 @@ class shared_ptr : public NpChkBase {
     auto operator->() const { return get(); }
     // auto operator[](std::ptrdiff_t i) const { return get()[i]; }
 };
+
 template <typename T, std::size_t N>
 class array : public NpChkBase, public std::array<T, N> {
     using Base = std::array<T, N>;
     Base &base() { return *this; }
     const Base &base() const { return *this; }
+    // n番目にアクセスしていいかチェックし投げる
     void check(std::size_t n) const {
         if (n >= N) {
             failOutOfRange(n, N);
+        }
+    }
+    // Tがnpchkの型なら名前をセットする
+    void updateName() override final {
+        if constexpr (std::is_base_of_v<NpChkBase, T>) {
+            for (std::size_t n = 0; n < N; ++n) {
+                base()[n].setName(this->name + "[" + std::to_string(n) + "]");
+            }
         }
     }
 
@@ -91,18 +118,12 @@ class array : public NpChkBase, public std::array<T, N> {
     explicit array(const char *names) : NpChkBase(names), Base() {
         updateName();
     }
-    void updateName() override {
-        if constexpr (std::is_base_of_v<NpChkBase, T>) {
-            for (std::size_t n = 0; n < N; ++n) {
-                base()[n].setName(this->name + "[" + std::to_string(n) + "]");
-            }
-        }
-    }
     template <typename U>
     auto operator=(const U &rhs) {
         base() = rhs;
         return *this;
     }
+    // atもoperator[]も同じ範囲チェックをする
     auto &at(std::size_t n) {
         check(n);
         return base()[n];
@@ -117,7 +138,8 @@ class array : public NpChkBase, public std::array<T, N> {
     const auto &front() const { return at(0); }
     auto &back() { return at(N ? N - 1 : 0); }
     const auto &back() const { return at(N ? N - 1 : 0); }
-    // 書きかけ
+    // メンバー書きかけ
+    // todo: vectorや他の配列っぽいクラスと処理が共通化できる?
 };
 } // namespace npchk
 
