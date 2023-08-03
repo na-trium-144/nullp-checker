@@ -97,6 +97,9 @@ class shared_ptr : public NpChkBase {
     auto operator*() const { return *get(); }
     auto operator->() const { return get(); }
     // auto operator[](std::ptrdiff_t i) const { return get()[i]; }
+    operator bool() const{
+        return base != nullptr;
+    }
 };
 
 // arrayやvectorなどの配列っぽい型に添字チェックをつける
