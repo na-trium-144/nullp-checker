@@ -1,7 +1,13 @@
 #pragma once
 #include <memory>
+#include <array>
+#include <vector>
+#include <deque>
+#include <initializer_list>
+#include <algorithm>
 #include <string>
 #include <cstring>
+#include <cassert>
 #include <stdexcept>
 #include <type_traits>
 
@@ -93,34 +99,36 @@ class shared_ptr : public NpChkBase {
     // auto operator[](std::ptrdiff_t i) const { return get()[i]; }
 };
 
-template <typename T, std::size_t N>
-class array : public NpChkBase, public std::array<T, N> {
-    using Base = std::array<T, N>;
+// arrayやvectorなどの配列っぽい型に添字チェックをつける
+// (本当はarray<shared_ptr>の内側のshared_ptrにもマクロで名前をつけられるようにするために作った)
+template <typename Base>
+class NpChkArrayLike : public NpChkBase, public Base {
+    using T = typename Base::value_type;
     Base &base() { return *this; }
     const Base &base() const { return *this; }
     // n番目にアクセスしていいかチェックし投げる
     void check(std::size_t n) const {
-        if (n >= N) {
-            failOutOfRange(n, N);
+        if (n >= this->size()) {
+            failOutOfRange(n, this->size());
         }
     }
     // Tがnpchkの型なら名前をセットする
     void updateName() override final {
         if constexpr (std::is_base_of_v<NpChkBase, T>) {
-            for (std::size_t n = 0; n < N; ++n) {
+            for (std::size_t n = 0; n < this->size(); ++n) {
                 base()[n].setName(this->name + "[" + std::to_string(n) + "]");
             }
         }
     }
 
   public:
-    array() = default;
-    explicit array(const char *names) : NpChkBase(names), Base() {
+    NpChkArrayLike() = default;
+    explicit NpChkArrayLike(const char *names) : NpChkBase(names), Base() {
         updateName();
     }
-    template <typename U>
-    auto operator=(const U &rhs) {
-        base() = rhs;
+    auto operator=(const std::initializer_list<T> init) {
+        assert(this->size() == init.size());
+        std::copy(init.begin(), init.end(), this->begin());
         return *this;
     }
     // atもoperator[]も同じ範囲チェックをする
@@ -136,11 +144,17 @@ class array : public NpChkBase, public std::array<T, N> {
     const auto &operator[](std::size_t n) const { return at(n); }
     auto &front() { return at(0); }
     const auto &front() const { return at(0); }
-    auto &back() { return at(N ? N - 1 : 0); }
-    const auto &back() const { return at(N ? N - 1 : 0); }
-    // メンバー書きかけ
-    // todo: vectorや他の配列っぽいクラスと処理が共通化できる?
+    auto &back() { return at(this->size() ? this->size() - 1 : 0); }
+    const auto &back() const { return at(this->size() ? this->size() - 1 : 0); }
 };
+
+template <typename T>
+using vector = NpChkArrayLike<std::vector<T>>;
+template <typename T>
+using deque = NpChkArrayLike<std::deque<T>>;
+template <typename T, std::size_t N>
+using array = NpChkArrayLike<std::array<T, N>>;
+
 } // namespace npchk
 
 #define NPCHK1(A, v1) v1(A)
