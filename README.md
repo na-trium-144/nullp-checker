@@ -6,17 +6,21 @@ c++のスマートポインタ(や配列)を置き換え、nullptr(や範囲外)
 * STLの各種クラスをnpchkのクラスで置き換えて使います
 	* `std::shared_ptr<T>` → `npchk::shared_ptr<T>`
 	* `std::array<T, N>` → `npchk::array<T, N>`
-		* メンバーの実装は不完全
-	* その他の型も後で作るかも
+	* `std::vector<T>` → `npchk::array<T>`
+	* `std::deque<T>` → `npchk::deque<T>`
 * エラーメッセージの表示のために変数名を登録する必要があります
 	* 変数の定義時に`NPCHK`マクロを使用すると自動で設定できます
 		* `NPCHK`マクロはnpchkのクラスがネストしていても(例えば`npchk::array<npchk::shared_ptr<int>,3>`とか)使えます
 		* 型のテンプレートに`,`を含む場合は型名全体を`( )`で囲う
+		* マクロ1つで変数8個まで同時に定義できます
+		* inlineは`inline NPCHK(...);`
+		* externは普通に宣言し定義時にのみ`NPCHK`を使う
 		```c++
-		// std::shared_ptr<T>, var の代わりに
-		NPCHK(npchk::shared_ptr<T>, var);
+		// std::array<int, 3>, var の代わりに
+		NPCHK((npchk::array<int, 3>), var);
 		```
 	* または`var.setName("var");`
+		* これもnpchkのクラスがネストしている場合は再帰的に設定されます
 
 ## example
 ```c++
