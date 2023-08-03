@@ -16,7 +16,7 @@ c++のスマートポインタ(や配列)を置き換え、nullptr(や範囲外)
 		* inlineは`inline NPCHK(...);`
 		* externは普通に宣言し定義時にのみ`NPCHK`を使う
 		```c++
-		// std::array<int, 3>, var の代わりに
+		// std::array<int, 3> var の代わりに
 		NPCHK((npchk::array<int, 3>), var);
 		```
 	* または`var.setName("var");`
